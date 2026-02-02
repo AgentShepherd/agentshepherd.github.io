@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Shepherd - Your agent should never (think about) reading your secrets</title>
+  <meta name="description" content="Agent Shepherd - Secure your AI agents from accessing sensitive data">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="a9b1a640-39e5-4098-ae7d-e163df60cbe1"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --fg: #e0e0e0;
+      --card: #12121a;
+      --muted: #1c1c2e;
+      --border: #2a2a3a;
+      --accent: #00cfaa;
+      --accent-secondary: #a855f7;
+      --accent-tertiary: #38bdf8;
+      --destructive: #ff3366;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: dark;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg);
+      color: var(--fg);
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    ::selection {
+      background: rgba(0, 207, 170, 0.3);
+      color: var(--fg);
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    /* Background image layer */
+    .shepherd-bg-wrapper {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .shepherd-bg-image {
+      width: 100%;
+      height: 100%;
+      background-size: contain;
+      background-position: center bottom;
+      background-repeat: no-repeat;
+      background-image: url('bg.jpg');
+      filter: brightness(0.5) contrast(1.2) grayscale(0.1);
+      animation: panAndZoom 60s ease-in-out infinite alternate;
+    }
+
+    .shepherd-bg-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        to bottom,
+        rgba(10, 10, 15, 1) 0%,
+        rgba(10, 10, 15, 0.95) 40%,
+        rgba(10, 10, 15, 0.7) 70%,
+        rgba(10, 10, 15, 0.3) 90%,
+        rgba(10, 10, 15, 0) 100%
+      );
+    }
+
+    @keyframes panAndZoom {
+      0% { transform: scale(1.0) translate(0, 0); }
+      25% { transform: scale(1.05) translate(-2%, 1%); }
+      50% { transform: scale(1.08) translate(1%, -2%); }
+      75% { transform: scale(1.03) translate(-1%, 2%); }
+      100% { transform: scale(1.0) translate(0, 0); }
+    }
+
+    /* Neural network canvas - layer on top of bg image */
+    #neural-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    /* Main container */
+    .container {
+      position: relative;
+      z-index: 10;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem;
+      padding-bottom: 0;
+      overflow: hidden;
+    }
+
+    /* GitHub corner link */
+    .github-corner {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 100;
+    }
+
+    .github-corner a {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--card);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.3s ease;
+    }
+
+    .github-corner a:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .github-corner svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Logo / Title */
+    .logo-section {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      margin-top: auto;
+    }
+
+    .title {
+      font-size: clamp(2.5rem, 8vw, 4.5rem);
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-tertiary) 50%, var(--accent-secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: none;
+      position: relative;
+      animation: neon-flicker 4s infinite alternate;
+    }
+
+    @keyframes neon-flicker {
+      0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+        filter: drop-shadow(0 0 4px var(--accent));
+      }
+      20%, 24%, 55% {
+        filter: none;
+      }
+    }
+
+    /* Tagline */
+    .tagline {
+      font-size: clamp(1rem, 3vw, 1.5rem);
+      color: var(--fg);
+      margin-bottom: 2rem;
+      text-align: center;
+      max-width: 700px;
+      line-height: 1.6;
+    }
+
+    .tagline .highlight {
+      color: var(--accent);
+    }
+
+    .tagline .strike {
+      position: relative;
+      color: var(--accent-secondary);
+    }
+
+    .tagline .strike::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 2px;
+      background: var(--accent-secondary);
+    }
+
+    /* Install section */
+    .install-section {
+      width: 100%;
+      max-width: 800px;
+      margin-bottom: 2rem;
+    }
+
+    .install-label {
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .install-label::before {
+      content: '>';
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .install-box {
+      position: relative;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      overflow: hidden;
+    }
+
+    .install-box::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      padding: 1px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-tertiary), var(--accent));
+      background-size: 200% 100%;
+      animation: electric-flow 3s linear infinite;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    @keyframes electric-flow {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 200% 50%; }
+    }
+
+    .install-command {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .install-command code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(0.75rem, 2vw, 0.85rem);
+      color: var(--fg);
+      white-space: nowrap;
+      overflow-x: auto;
+      flex: 1;
+    }
+
+    .install-command code .bin {
+      color: var(--accent-tertiary);
+    }
+
+    .install-command code .url {
+      color: var(--accent);
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      flex-shrink: 0;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .copy-btn.copied {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* Features / Info */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      width: 100%;
+      max-width: 800px;
+      margin-bottom: 1.5rem;
+    }
+
+    .feature {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .feature:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .feature-icon.green { color: var(--accent); }
+    .feature-icon.cyan { color: var(--accent-tertiary); }
+    .feature-icon.pink { color: var(--accent-secondary); }
+
+    .feature-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-desc {
+      font-size: 0.75rem;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: auto;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #6b7280;
+      padding-bottom: 1.5rem;
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .github-corner {
+        top: 0.5rem;
+        right: 0.5rem;
+      }
+
+      .github-corner a {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.65rem;
+      }
+
+      .install-command {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .install-command code {
+        font-size: 0.7rem;
+        text-align: center;
+        white-space: normal;
+        word-break: break-all;
+      }
+
+      .copy-btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background image layer -->
+  <div class="shepherd-bg-wrapper">
+    <div class="shepherd-bg-image"></div>
+    <div class="shepherd-bg-overlay"></div>
+  </div>
+
+  <!-- Neural network background -->
+  <canvas id="neural-bg"></canvas>
+
+  <!-- GitHub corner link -->
+  <div class="github-corner">
+    <a href="https://github.com/AgentShepherd/agentshepherd" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      Star on GitHub
+    </a>
+  </div>
+
+  <!-- Main content -->
+  <div class="container">
+    <!-- Title -->
+    <div class="logo-section">
+      <h1 class="title">Agent Shepherd</h1>
+    </div>
+
+    <!-- Tagline -->
+    <p class="tagline">
+      Your agents should <span class="highlight">never</span>
+      <span class="strike">(think about)</span>
+      reading your <span class="highlight">secrets</span>
+    </p>
+
+    <!-- Install command -->
+    <div class="install-section">
+      <div class="install-label">Quick Install</div>
+      <div class="install-box">
+        <div class="install-command">
+          <code><span class="bin">/bin/bash</span> -c "$(curl -fsSL \<br><span class="url">https://raw.githubusercontent.com/AgentShepherd/agentshepherd/main/install.sh</span>)"</code>
+          <button class="copy-btn" onclick="copyCommand(this)">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon green">🛡️</div>
+        <div class="feature-title">Guardrails</div>
+        <div class="feature-desc">Block destructive and unauthorized agent actions</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon cyan">🚀</div>
+        <div class="feature-title">Near-Zero Latency</div>
+        <div class="feature-desc">High-performance Go gateway with minimal overhead</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon pink">⚡</div>
+        <div class="feature-title">Easy Setup</div>
+        <div class="feature-desc">One command install, works with any agent framework</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Built for a world where AI agents assist your work, not expose your secrets.</p>
+      <p style="margin-top: 0.5rem;">
+        <a href="https://github.com/AgentShepherd/agentshepherd">GitHub</a> &middot;
+        <a href="https://agentshepherd.ai">agentshepherd.ai</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    // Copy command
+    function copyCommand(btn) {
+      var command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/AgentShepherd/agentshepherd/main/install.sh)"';
+      navigator.clipboard.writeText(command).then(function() {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    // PCB Circuit Board Background
+    (function() {
+      var canvas = document.getElementById('neural-bg');
+      var ctx = canvas.getContext('2d');
+      var traces = [];
+      var pulses = [];
+      var nodes = [];
+      var gridSize = 30;
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        createCircuit();
+      }
+
+      function createCircuit() {
+        traces = [];
+        nodes = [];
+        pulses = [];
+
+        var cols = Math.ceil(canvas.width / gridSize) + 1;
+        var rows = Math.ceil(canvas.height / gridSize) + 1;
+
+        // Create nodes (solder pads) at grid intersections
+        for (var i = 0; i < 40; i++) {
+          nodes.push({
+            x: Math.floor(Math.random() * cols) * gridSize,
+            y: Math.floor(Math.random() * rows) * gridSize,
+            radius: Math.random() * 3 + 2,
+            type: Math.random() > 0.7 ? 'square' : 'circle'
+          });
+        }
+
+        // Create traces between random nodes
+        for (var j = 0; j < 60; j++) {
+          var startX = Math.floor(Math.random() * cols) * gridSize;
+          var startY = Math.floor(Math.random() * rows) * gridSize;
+          var path = [{x: startX, y: startY}];
+
+          // Generate PCB-style path (orthogonal with 45-degree turns)
+          var segments = Math.floor(Math.random() * 4) + 2;
+          var currentX = startX;
+          var currentY = startY;
+
+          for (var k = 0; k < segments; k++) {
+            var direction = Math.floor(Math.random() * 4);
+            var length = (Math.floor(Math.random() * 6) + 2) * gridSize;
+
+            if (direction === 0) currentX += length;
+            else if (direction === 1) currentX -= length;
+            else if (direction === 2) currentY += length;
+            else currentY -= length;
+
+            // Keep in bounds
+            currentX = Math.max(0, Math.min(canvas.width, currentX));
+            currentY = Math.max(0, Math.min(canvas.height, currentY));
+
+            path.push({x: currentX, y: currentY});
+          }
+
+          traces.push({
+            path: path,
+            width: Math.random() > 0.8 ? 2 : 1,
+            opacity: Math.random() * 0.06 + 0.02
+          });
+        }
+      }
+
+      function createPulse() {
+        if (traces.length === 0) return;
+        var trace = traces[Math.floor(Math.random() * traces.length)];
+        if (trace.path.length < 2) return;
+
+        pulses.push({
+          trace: trace,
+          progress: 0,
+          speed: 0.008 + Math.random() * 0.012,
+          color: Math.random() > 0.5 ? 'rgba(0, 207, 170,' : 'rgba(56, 189, 248,'
+        });
+      }
+
+      function getPointOnPath(path, progress) {
+        var totalLength = 0;
+        var lengths = [];
+
+        for (var i = 0; i < path.length - 1; i++) {
+          var dx = path[i + 1].x - path[i].x;
+          var dy = path[i + 1].y - path[i].y;
+          var len = Math.sqrt(dx * dx + dy * dy);
+          lengths.push(len);
+          totalLength += len;
+        }
+
+        var targetLength = progress * totalLength;
+        var currentLength = 0;
+
+        for (var j = 0; j < lengths.length; j++) {
+          if (currentLength + lengths[j] >= targetLength) {
+            var segmentProgress = (targetLength - currentLength) / lengths[j];
+            return {
+              x: path[j].x + (path[j + 1].x - path[j].x) * segmentProgress,
+              y: path[j].y + (path[j + 1].y - path[j].y) * segmentProgress
+            };
+          }
+          currentLength += lengths[j];
+        }
+
+        return path[path.length - 1];
+      }
+
+      function update() {
+        // Pulses removed - no moving dots
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw traces
+        for (var i = 0; i < traces.length; i++) {
+          var trace = traces[i];
+          ctx.strokeStyle = 'rgba(0, 207, 170, ' + trace.opacity + ')';
+          ctx.lineWidth = trace.width;
+          ctx.lineCap = 'square';
+          ctx.lineJoin = 'miter';
+
+          ctx.beginPath();
+          ctx.moveTo(trace.path[0].x, trace.path[0].y);
+          for (var j = 1; j < trace.path.length; j++) {
+            ctx.lineTo(trace.path[j].x, trace.path[j].y);
+          }
+          ctx.stroke();
+        }
+
+        // Draw nodes (solder pads)
+        for (var k = 0; k < nodes.length; k++) {
+          var node = nodes[k];
+
+          // Glow
+          var gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 3);
+          gradient.addColorStop(0, 'rgba(0, 207, 170, 0.15)');
+          gradient.addColorStop(1, 'rgba(0, 207, 170, 0)');
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius * 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Pad
+          ctx.fillStyle = 'rgba(0, 207, 170, 0.25)';
+          if (node.type === 'square') {
+            ctx.fillRect(node.x - node.radius, node.y - node.radius, node.radius * 2, node.radius * 2);
+          } else {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Hole
+          ctx.fillStyle = '#0a0a0f';
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius * 0.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Pulses removed - no moving dots
+      }
+
+      function animate() {
+        update();
+        draw();
+        requestAnimationFrame(animate);
+      }
+
+      // Initialize
+      resize();
+      animate();
+
+      // Handle resize
+      window.addEventListener('resize', function() {
+        resize();
+      });
+    })();
+  </script>
+</body>
+</html>
